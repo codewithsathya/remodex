@@ -111,17 +111,11 @@ final class SubscriptionService {
     }
 
     var hasAppAccess: Bool {
-        hasProAccess || hasFreeSendAccess
+        true
     }
 
-    // Counts a valid send attempt for free users even if the turn later fails.
+    // Pro access is currently free, so sends are no longer metered locally.
     func consumeFreeSendAttemptIfNeeded() {
-        guard !hasProAccess, freeSendCount < Self.freeSendLimit else {
-            return
-        }
-
-        freeSendCount += 1
-        defaults.set(freeSendCount, forKey: Self.freeSendCountDefaultsKey)
     }
 
     // Bootstraps subscription state once at launch or from the recovery retry action.
