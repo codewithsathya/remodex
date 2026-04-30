@@ -18,6 +18,9 @@ const MAX_IMAGE_READ_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_PREVIEW_READ_BYTES = 2 * 1024 * 1024;
 const MIN_IMAGE_PREVIEW_PIXEL_DIMENSION = 128;
 const MAX_IMAGE_PREVIEW_PIXEL_DIMENSION = 3_200;
+const IMAGE_PREVIEW_FORMAT = "jpeg";
+const IMAGE_PREVIEW_EXTENSION = ".jpg";
+const IMAGE_PREVIEW_FORMAT_OPTIONS = "82";
 const IMAGE_MIME_TYPES_BY_EXTENSION = new Map([
   [".jpg", "image/jpeg"],
   [".jpeg", "image/jpeg"],
@@ -152,9 +155,15 @@ async function workspaceReadImage(params) {
     };
   }
 
-  const data = maxPixelDimension
+  const preview = maxPixelDimension
     ? await readPreviewImageData(realImagePath, maxPixelDimension)
+    : null;
+  const data = preview
+    ? preview.data
     : await fs.promises.readFile(realImagePath);
+  if (preview) {
+    result.previewMaxPixelDimension = preview.maxPixelDimension;
+  }
   return {
     ...result,
     dataByteLength: data.length,
@@ -174,32 +183,68 @@ function normalizedPreviewPixelDimension(params) {
 }
 
 async function readPreviewImageData(imagePath, maxPixelDimension) {
-  let previewData;
-  try {
-    previewData = await downsampleImageWithSips(imagePath, maxPixelDimension);
-  } catch {
-    throw workspaceError(
-      "image_preview_failed",
-      "This image could not be converted into a lightweight phone preview."
-    );
+  for (const candidateDimension of previewPixelDimensionCandidates(maxPixelDimension)) {
+    let previewData;
+    try {
+      previewData = await downsampleImageWithSips(imagePath, candidateDimension);
+    } catch {
+      throw workspaceError(
+        "image_preview_failed",
+        "This image could not be converted into a lightweight phone preview."
+      );
+    }
+
+    if (previewData && previewData.length > 0 && previewData.length <= MAX_IMAGE_PREVIEW_READ_BYTES) {
+      return {
+        data: previewData,
+        maxPixelDimension: candidateDimension,
+      };
+    }
   }
-  if (!previewData || previewData.length === 0 || previewData.length > MAX_IMAGE_PREVIEW_READ_BYTES) {
-    throw workspaceError(
-      "image_preview_too_large",
-      "This image preview is still too large to send to the phone."
-    );
+
+  throw workspaceError(
+    "image_preview_too_large",
+    "This image preview is still too large to send to the phone."
+  );
+}
+
+function previewPixelDimensionCandidates(maxPixelDimension) {
+  const candidates = [];
+  let candidate = maxPixelDimension;
+  while (candidate >= MIN_IMAGE_PREVIEW_PIXEL_DIMENSION) {
+    candidates.push(candidate);
+    candidate = Math.floor(candidate / 2);
   }
-  return previewData;
+  if (!candidates.includes(MIN_IMAGE_PREVIEW_PIXEL_DIMENSION)) {
+    candidates.push(MIN_IMAGE_PREVIEW_PIXEL_DIMENSION);
+  }
+  return candidates;
 }
 
 async function downsampleImageWithSips(imagePath, maxPixelDimension) {
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "remodex-image-preview-"));
-  const outputPath = path.join(tempDir, `preview${path.extname(imagePath) || ".png"}`);
+  const outputPath = path.join(tempDir, `preview${IMAGE_PREVIEW_EXTENSION}`);
   try {
-    await execFileAsync("sips", ["-Z", String(maxPixelDimension), imagePath, "--out", outputPath], {
-      timeout: 15_000,
-      maxBuffer: 1024 * 1024,
-    });
+    await execFileAsync(
+      "sips",
+      [
+        "-Z",
+        String(maxPixelDimension),
+        "-s",
+        "format",
+        IMAGE_PREVIEW_FORMAT,
+        "-s",
+        "formatOptions",
+        IMAGE_PREVIEW_FORMAT_OPTIONS,
+        imagePath,
+        "--out",
+        outputPath,
+      ],
+      {
+        timeout: 15_000,
+        maxBuffer: 1024 * 1024,
+      }
+    );
     return await fs.promises.readFile(outputPath);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});

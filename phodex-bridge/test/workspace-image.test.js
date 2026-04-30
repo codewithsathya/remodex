@@ -6,6 +6,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -97,6 +98,28 @@ test("workspace/readImage accepts bounded preview reads", async () => {
   assert.equal(result.previewMaxPixelDimension, 1600);
   assert.equal(typeof result.dataBase64, "string");
   assert.ok(Buffer.from(result.dataBase64, "base64").length > 0);
+});
+
+test("workspace/readImage recompresses noisy generated PNG previews until they fit", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "remodex-image-"));
+  execFileSync("git", ["init"], { cwd: tempDir, stdio: "ignore" });
+  const sourcePath = path.join(tempDir, "generated.ppm");
+  const imagePath = path.join(tempDir, "generated.png");
+  writeNoisyPpm(sourcePath, 1600, 1600);
+  execFileSync("sips", ["-s", "format", "png", sourcePath, "--out", imagePath], { stdio: "ignore" });
+
+  const result = await handleWorkspaceMethod("workspace/readImage", {
+    cwd: tempDir,
+    path: imagePath,
+    maxPixelDimension: 1600,
+  });
+  const previewBytes = Buffer.from(result.dataBase64, "base64");
+
+  assert.equal(result.path, fs.realpathSync(imagePath));
+  assert.ok(result.byteLength > 2 * 1024 * 1024);
+  assert.ok(result.previewMaxPixelDimension <= 1600);
+  assert.ok(previewBytes.length > 0);
+  assert.ok(previewBytes.length <= 2 * 1024 * 1024);
 });
 
 test("workspace/readImage revalidates cached preview dimensions", async () => {
@@ -239,3 +262,10 @@ test("workspace/readImage rejects cwd widening outside a repository", async () =
     /Only images in this workspace/
   );
 });
+
+function writeNoisyPpm(filePath, width, height) {
+  const header = Buffer.from(`P6\n${width} ${height}\n255\n`, "ascii");
+  const pixels = Buffer.alloc(width * height * 3);
+  crypto.randomFillSync(pixels);
+  fs.writeFileSync(filePath, Buffer.concat([header, pixels]));
+}
