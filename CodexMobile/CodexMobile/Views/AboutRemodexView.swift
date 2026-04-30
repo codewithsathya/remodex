@@ -395,7 +395,7 @@ struct AboutRemodexView: View {
         VStack(spacing: 10) {
             OpenSourceBadge(style: .dark)
 
-            Text("ISC License")
+            Text("MIT License")
                 .font(AppFont.caption())
                 .foregroundStyle(.tertiary)
         }
