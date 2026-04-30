@@ -1,0 +1,25 @@
+services:
+  relay:
+    build:
+      context: ./relay
+    image: remodex-relay:local
+    container_name: remodex-relay
+    restart: unless-stopped
+    ports:
+      - "${REMODEX_RELAY_PORT:-9000}:9000"
+    environment:
+      NODE_ENV: production
+      PORT: "9000"
+      REMODEX_TRUST_PROXY: "${REMODEX_TRUST_PROXY:-false}"
+      REMODEX_ENABLE_PUSH_SERVICE: "${REMODEX_ENABLE_PUSH_SERVICE:-false}"
+      REMODEX_PUSH_STATE_FILE: /data/remodex/push-state.json
+      REMODEX_APNS_TEAM_ID: "${REMODEX_APNS_TEAM_ID:-}"
+      REMODEX_APNS_KEY_ID: "${REMODEX_APNS_KEY_ID:-}"
+      REMODEX_APNS_BUNDLE_ID: "${REMODEX_APNS_BUNDLE_ID:-}"
+      REMODEX_APNS_PRIVATE_KEY: "${REMODEX_APNS_PRIVATE_KEY:-}"
+      REMODEX_APNS_PRIVATE_KEY_FILE: "${REMODEX_APNS_PRIVATE_KEY_FILE:-}"
+    volumes:
+      - relay-data:/data
+
+volumes:
+  relay-data:

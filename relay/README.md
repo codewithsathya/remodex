@@ -124,4 +124,12 @@ npm install
 npm start
 ```
 
+Or run the relay from the repo root with Docker Compose:
+
+```sh
+docker compose up --build relay
+```
+
+The compose file publishes host port `9000` by default. Override it with `REMODEX_RELAY_PORT`, and pass optional relay settings such as `REMODEX_TRUST_PROXY=true` or `REMODEX_ENABLE_PUSH_SERVICE=true` through your shell environment.
+
 `server.js` exports `createRelayServer()`, and `relay.js` exports the lower-level `setupRelay(wss)` transport primitive if you want to embed the relay in your own server.
